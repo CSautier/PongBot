@@ -98,8 +98,8 @@ class DQN:
                 return np.random.randint(0,2) #we play randomly one of the possible actions
             else:
                 return np.argmax(predict) #we play the estimated best action
-        elif self.mode==1:
-            predict=np.exp(predict)
+        elif self.mode==1: #mode where the exploration is given by a softmax function
+            predict=np.exp(np.multiply(predict,4))#this number is relatively arbitrary, the bigger it is, the more we "trust" our net
             predict/=sum(predict)
             aleatar=0.
             #print(predict)

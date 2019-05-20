@@ -33,8 +33,8 @@ class DQN:
             self.model = self.create_model()
             self.target_model = self.create_model()
         else:
-            self.model = load_model('pong.h5')
-            self.target_model = load_model('pong.h5')
+            self.model = load_model('pong_mobilenet.h5')
+            self.target_model = load_model('pong_mobilenet.h5')
             print("Model loaded")
             self.model.compile(loss="mean_squared_error", optimizer=SGD(lr=self.learning_rate))  
         
@@ -133,12 +133,12 @@ def main(load=False, steps = 10000, mode=0): #mode 0 : epsilon, 1 : proba explo,
                 dqn_agent.replay()            
             score+=reward
             dqn_agent.target_train()
-        dqn_agent.save_model("pong.h5")
+        dqn_agent.save_model("pong_mobilenet.h5")
         print("epsilon :", dqn_agent.epsilon, "score :", score, "saving model")
         score=0
         #print("Reward:", sum_reward, "Epsilon:", max(dqn_agent.epsilon, dqn_agent.epsilon_min))
         #game_length=0
         #sum_reward=0
     
-    dqn_agent.save_model("pong.h5")
+    dqn_agent.save_model("pong_mobilenet.h5")
     dqn_agent.env.close()

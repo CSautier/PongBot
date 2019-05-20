@@ -12,14 +12,13 @@ from tensorflow.keras import Model
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras.models import load_model
 import numpy as np
-import random
 from collections import deque
 
 class DQN:
     def __init__(self, load, mode, epsilon, epsilon_min, epsilon_decay):
         self.env = gym.make('Pong-v0')
         self.memory = deque(maxlen=2000) #double-end list of fixed length to remember recent experiences
-        self.learning_rate = 5e-4 #ideally start with 1e-3 and end with 5e-3
+        self.learning_rate = 5e-4 #ideally start with 1e-3 and end with 5e-4
         self.batch_size = 16
         self.gamma=0.9 #1-discount rate in the reward function
         self.epsilon = epsilon #initial probability for random movement if mode=0
@@ -30,8 +29,8 @@ class DQN:
             self.model = self.create_model() #"fast" model, trained at each step
             self.target_model = self.create_model() #"stable" model, trained once in a while
         else:
-            self.model = load_model('pong_2.h5')
-            self.target_model = load_model('pong_2.h5')
+            self.model = load_model('pong.h5')
+            self.target_model = load_model('pong.h5')
             self.model.compile(loss="mean_squared_error", optimizer=SGD(lr=self.learning_rate))
         
         
@@ -90,15 +89,25 @@ class DQN:
         
     def act(self, state, env):#chose the action to take
         predict=self.model.predict(state)[0]
-        if self.mode==1: #mode where we always play the estimated best action
+        if self.mode==2: #mode where we always play the estimated best action
             return np.argmax(predict)
         elif self.mode==0: #mode where we sometime play randomly
             self.epsilon *= self.epsilon_decay #we decay epsilon
             self.epsilon = max(self.epsilon_min, self.epsilon) #unless it is already at its min
             if np.random.random() < self.epsilon:
-                return random.randint(0,1) #we play randomly one of the possible actions
+                return np.random.randint(0,2) #we play randomly one of the possible actions
             else:
                 return np.argmax(predict) #we play the estimated best action
+        elif self.mode==1:
+            predict=np.exp(predict)
+            predict/=sum(predict)
+            aleatar=0.
+            #print(predict)
+            alea = np.random.random()
+            for i in range(len(predict)):
+                aleatar+=predict[i]
+                if(alea<=aleatar):
+                    return(i)
                 
     def target_train(self):#copy the weight of the "fast" model to the "slow" one (see double q learning for references)
         self.target_model.set_weights(self.model.get_weights())
@@ -107,7 +116,7 @@ class DQN:
         print("saving, don't exit the program")
         self.model.save(fn)
         
-def main(load=False, steps = 5000, mode=0, epsilon = 1., epsilon_min = 0.05, epsilon_decay = 0.999996, render=True, quickstart=False, steps_quickstart=100): #the function to start the program. load = whether or not to load a previous network, mode 0 : epsilon, 1 : argmax, render : show the game or not (can be slower)
+def main(load=False, steps = 5000, mode=0, epsilon = 1., epsilon_min = 0.05, epsilon_decay = 0.999996, render=True, quickstart=False, steps_quickstart=100): #the function to start the program. load = whether or not to load a previous network, mode 0 : classic exploration, 1 : softmax exploration, 2: argmax, render : show the game or not (can be slower)
     dqn_agent = DQN(load, mode, epsilon, epsilon_min, epsilon_decay)
     step=0
     if quickstart: #quickstart gives an approximation of q-learning based on the actual score instead of the theoretical minimum, but is easier to train as long as the approximation holds
@@ -136,12 +145,13 @@ def main(load=False, steps = 5000, mode=0, epsilon = 1., epsilon_min = 0.05, eps
                     dqn_agent.remember(state, action,10*reward, state2, True) #done = true fix the reward to be applied instantly
                     reward*=dqn_agent.gamma
                 del tempmem
-            dqn_agent.save_model("pong_2.h5")
+            dqn_agent.save_model("pong.h5")
             print("epsilon :", dqn_agent.epsilon, "score :", score, "model saved")
             score=0
         del dqn_agent.memory
         dqn_agent.memory=deque(maxlen=2000)
         dqn_agent.target_train()
+        print("Exiting quickstart")
     while step<steps:
         done= False
         score=0
@@ -163,7 +173,7 @@ def main(load=False, steps = 5000, mode=0, epsilon = 1., epsilon_min = 0.05, eps
                 dqn_agent.replay() #train the model
             score+=reward
             dqn_agent.target_train() #train the "stable model"
-        dqn_agent.save_model("pong_2.h5")
+        dqn_agent.save_model("pong.h5")
         print("epsilon :", dqn_agent.epsilon, "score :", score, "model saved")
         score=0
     

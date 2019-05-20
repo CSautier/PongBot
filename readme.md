@@ -6,3 +6,5 @@ It uses some clever speedups such as a "quickstart" to train the model much fast
 A good way to start the training would be to run main(mode=1, quickstart=True, steps_quickstart=500).
 
 For more information, you can contact me on my github.
+
+Note: If you run short on RAM, you can reduce self.memory maxlen

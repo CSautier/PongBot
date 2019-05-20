@@ -18,7 +18,7 @@ from collections import deque
 class DQN:
     def __init__(self, load, mode, epsilon, epsilon_min, epsilon_decay):
         self.env = gym.make('Pong-v0')
-        self.memory = deque(maxlen=2000) #double-end list of fixed length to remember recent experiences
+        self.memory = deque(maxlen=4000) #double-end list of fixed length to remember recent experiences
         self.learning_rate = 5e-4 #ideally start with 1e-3 and end with 5e-4
         self.batch_size = 16
         self.gamma=0.9 #1-discount rate in the reward function

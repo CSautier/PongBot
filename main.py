@@ -12,6 +12,7 @@ from tensorflow.keras import Model
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras.models import load_model
 import numpy as np
+import random
 from collections import deque
 
 class DQN:
@@ -80,7 +81,6 @@ class DQN:
         for sample in samples:
             state, action, reward, new_state, done = sample
             target = self.model.predict(state.reshape((1,)+state.shape)) #predicted score for each action for our network, obtained with the "stable" model for stability issues
-            #print((target[0][action]-reward)*100)
             target[0][action] = reward
             targets.append(target[0])
             states.append(state)

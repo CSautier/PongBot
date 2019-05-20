@@ -116,7 +116,7 @@ class DQN:
         print("saving, don't exit the program")
         self.model.save(fn)
         
-def main(load=False, steps = 5000, mode=0, epsilon = 1., epsilon_min = 0.05, epsilon_decay = 0.999996, render=True, quickstart=False, steps_quickstart=100): #the function to start the program. load = whether or not to load a previous network, mode 0 : classic exploration, 1 : softmax exploration, 2: argmax, render : show the game or not (can be slower)
+def main(load=False, steps = 5000, mode=0, epsilon = 1., epsilon_min = 0.05, epsilon_decay = 0.999996, render=True, quickstart=False, steps_quickstart=500): #the function to start the program. load = whether or not to load a previous network, mode 0 : classic exploration, 1 : softmax exploration, 2: argmax, render : show the game or not (can be slower)
     dqn_agent = DQN(load, mode, epsilon, epsilon_min, epsilon_decay)
     step=0
     if quickstart: #quickstart gives an approximation of q-learning based on the actual score instead of the theoretical minimum, but is easier to train as long as the approximation holds

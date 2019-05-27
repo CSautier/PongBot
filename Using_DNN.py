@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Created on Sat May 25 17:18:32 2019
+
+@author: cstr
+"""
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
 Created on Mon Apr 29 18:58:04 2019
 
 @author: cstr
@@ -18,8 +26,8 @@ from collections import deque
 class DQN:
     def __init__(self, load, mode, epsilon, epsilon_min, epsilon_decay):
         self.env = gym.make('Pong-v0')
-        self.memory = deque(maxlen=4000) #double-end list of fixed length to remember recent experiences
-        self.learning_rate = 5e-4 #ideally start with 1e-3 and end with 5e-4
+        self.memory = deque(maxlen=8000) #double-end list of fixed length to remember recent experiences
+        self.learning_rate = 4e-4 #ideally start with 1e-3 and end with 5e-4
         self.batch_size = 16
         self.gamma=0.9 #1-discount rate in the reward function
         self.epsilon = epsilon #initial probability for random movement if mode=0
@@ -30,17 +38,23 @@ class DQN:
             self.model = self.create_model() #"fast" model, trained at each step
             self.target_model = self.create_model() #"stable" model, trained once in a while
         else:
-            self.model = load_model('pong.h5')
-            self.target_model = load_model('pong.h5')
+            self.model = load_model('pong_deep.h5')
+            self.target_model = load_model('pong_deep.h5')
             self.model.compile(loss="mean_squared_error", optimizer=SGD(lr=self.learning_rate))
         
         
     def create_model(self):
         input = layers.Input(shape=(80, 80,2))
-        x = layers.Conv2D(filters=10, kernel_size=20, activation='relu', padding='valid',strides=(4,4))(input)
-        x = layers.Conv2D(filters=20, kernel_size=10, activation='relu', padding='valid',strides=(2,2))(x)
-        x = layers.Conv2D(filters=40, kernel_size=3, activation='relu', padding='valid')(x)
+        x = layers.Conv2D(filters=16, kernel_size=5, activation='relu', padding='same')(input)
+        x = layers.MaxPooling2D(pool_size=(4, 4), strides=None, padding='same')(x)
         x = layers.Flatten()(x)
+        x = layers.Dropout(rate=0.2)(x)
+        x= layers.Dense(16, activation="relu")(x)
+        x = layers.Dropout(rate=0.1)(x)
+        x= layers.Dense(16, activation="relu")(x)
+        x = layers.Dropout(rate=0.1)(x)
+        x= layers.Dense(16, activation="relu")(x)
+        x = layers.Dropout(rate=0.1)(x)
         output = layers.Dense(2)(x)
         model = Model(input, output)
         model.summary()
@@ -73,8 +87,11 @@ class DQN:
         self.model.fit(np.array(states), np.array(targets), epochs=1, batch_size=self.batch_size, verbose=0)
         
     def quick_replay(self): #a version of replay for quickstart
-        while len(self.memory)>0:
-            state, action, reward, new_state, done = self.memory.pop()
+        if len(self.memory) < 10*self.batch_size: #very early step of the program, there is a risk of overfitting
+            return
+        samples = random.sample(self.memory, 10*self.batch_size)
+        for sample in samples:
+            state, action, reward, new_state, done = sample
             target = self.model.predict(state.reshape((1,)+state.shape)) #predicted score for each action for our network, obtained with the "stable" model for stability issues
             if(reward==-10):
                 print(target[0][action]-reward)
@@ -97,7 +114,6 @@ class DQN:
             predict=np.exp(predict)
             predict/=sum(predict)
             aleatar=0.
-            #print(predict)
             alea = np.random.random()
             for i in range(len(predict)):
                 aleatar+=predict[i]
@@ -140,11 +156,11 @@ def main(load=False, steps = 5000, mode=0, epsilon = 1., epsilon_min = 0.05, eps
                     reward*=dqn_agent.gamma
                 del tempmem
                 dqn_agent.quick_replay() #train the model
-            dqn_agent.save_model("pong.h5")
+            dqn_agent.save_model("pong_deep.h5")
             print("epsilon :", dqn_agent.epsilon, "score :", score, "model saved")
             score=0
         del dqn_agent.memory
-        dqn_agent.memory=deque(maxlen=4000)
+        dqn_agent.memory=deque(maxlen=8000)
         dqn_agent.target_train()
         print("Exiting quickstart")
     dqn_agent.model.compile(loss="mean_squared_error", optimizer=SGD(lr=dqn_agent.learning_rate/2))
@@ -170,7 +186,7 @@ def main(load=False, steps = 5000, mode=0, epsilon = 1., epsilon_min = 0.05, eps
                 dqn_agent.replay() #train the model
             score+=reward
             dqn_agent.target_train() #train the "stable model"
-        dqn_agent.save_model("pong.h5")
+        dqn_agent.save_model("pong_deep.h5")
         print("epsilon :", dqn_agent.epsilon, "score :", score, "model saved")
         score=0
     

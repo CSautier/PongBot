@@ -19,10 +19,8 @@ from tensorflow.keras import layers
 from tensorflow.keras import Model
 import tensorflow.keras.backend as K
 from tensorflow.keras.optimizers import Adam
-import matplotlib.pyplot as plt
 from tensorflow.keras.models import load_model
 import numpy as np
-from collections import deque
 
 LOSS_CLIPPING=0.2
 ENTROPY_LOSS = 1e-3
@@ -40,9 +38,7 @@ def proximal_policy_optimization_loss(advantage, old_prediction):#this is the cl
 class PPO_agent:
     def __init__(self, load, exploration):
         self.env = gym.make('Pong-v0')
-        self.memory = deque(maxlen=10000) #double-end list of fixed length to remember recent experiences
         self.learning_rate = 1e-4
-        self.batch_size = 160
         self.gamma=0.95
         self.exploration=exploration
         if(not load):
@@ -173,5 +169,4 @@ def main(load=False, steps = 20000, exploration=True, render=True): #the functio
         ppo_agent.save_model()
         print("Score: ",score," model saved")
         score=0
-    del ppo_agent.memory
     ppo_agent.env.close()

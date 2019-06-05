@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Created on Sat May 25 17:18:32 2019
+
+@author: cstr
+"""
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
 Created on Mon Apr 29 18:58:04 2019
 
 @author: cstr
@@ -9,169 +17,161 @@ Created on Mon Apr 29 18:58:04 2019
 import gym
 from tensorflow.keras import layers
 from tensorflow.keras import Model
-from tensorflow.keras.optimizers import SGD
+import tensorflow.keras.backend as K
+from tensorflow.keras.optimizers import Adam
+import matplotlib.pyplot as plt
 from tensorflow.keras.models import load_model
 import numpy as np
-import random
 from collections import deque
 
-class DQN:
-    def __init__(self, load, mode, epsilon, epsilon_min, epsilon_decay):
+LOSS_CLIPPING=0.2
+ENTROPY_LOSS = 1e-3
+DUMMY_ACTION, DUMMY_VALUE = np.zeros((1, 2)), np.zeros((1, 1))
+
+def proximal_policy_optimization_loss(advantage, old_prediction):#this is the clipped PPO loss function, see https://arxiv.org/pdf/1707.06347.pdf
+    def loss(y_true, y_pred):
+        prob = y_true * y_pred
+        old_prob = y_true * old_prediction
+        r = prob/(old_prob + 1e-10)
+        return -K.mean(K.minimum(r * advantage, K.clip(r, min_value=1 - LOSS_CLIPPING, max_value=1 + LOSS_CLIPPING) * advantage) + ENTROPY_LOSS * -(prob * K.log(prob + 1e-10)))
+    return loss   
+
+
+class PPO_agent:
+    def __init__(self, load, exploration):
         self.env = gym.make('Pong-v0')
-        self.memory = deque(maxlen=4000) #double-end list of fixed length to remember recent experiences
-        self.learning_rate = 5e-4 #ideally start with 1e-3 and end with 5e-4
-        self.batch_size = 16
-        self.gamma=0.9 #1-discount rate in the reward function
-        self.epsilon = epsilon #initial probability for random movement if mode=0
-        self.epsilon_min = epsilon_min #final probability for random movement if mode=0
-        self.epsilon_decay = epsilon_decay
-        self.mode=mode
+        self.memory = deque(maxlen=10000) #double-end list of fixed length to remember recent experiences
+        self.learning_rate = 1e-4
+        self.batch_size = 160
+        self.gamma=0.95
+        self.exploration=exploration
         if(not load):
-            self.model = self.create_model() #"fast" model, trained at each step
-            self.target_model = self.create_model() #"stable" model, trained once in a while
+            #there are 2 networks : actor and critic, as described in the PPO papers.
+            self.actor, self.actor_weights = self.create_actor() #actor_weights allows us to save the network
+            self.critic = self.create_critic()
+
         else:
-            self.model = load_model('pong.h5')
-            self.target_model = load_model('pong.h5')
-            self.model.compile(loss="mean_squared_error", optimizer=SGD(lr=self.learning_rate))
-        
-        
-    def create_model(self):
-        input = layers.Input(shape=(80, 80,2))
-        x = layers.Conv2D(filters=10, kernel_size=20, activation='relu', padding='valid',strides=(4,4))(input)
-        x = layers.Conv2D(filters=20, kernel_size=10, activation='relu', padding='valid',strides=(2,2))(x)
-        x = layers.Conv2D(filters=40, kernel_size=3, activation='relu', padding='valid')(x)
-        x = layers.Flatten()(x)
-        output = layers.Dense(2)(x)
-        model = Model(input, output)
-        model.summary()
-        model.compile(loss="mean_squared_error", optimizer=SGD(lr=self.learning_rate))     
-        return model
-    
-    def remember(self, state, action, reward, new_state, done):
-        self.memory.append([state, action, reward, new_state, done])
-                    
+            self.critic = load_model('pong_ppo_critic.h5')  
+            self.critic.compile(loss="mean_squared_error", optimizer=Adam(lr=self.learning_rate))
+            self.actor_weights = load_model('pong_ppo_actor.h5')
+            advantage = layers.Input(shape=(1,))
+            obtained_prediction = layers.Input(shape=(2,))
             
-    def replay(self): #create a batch of previous experience and train from them
-        targets=[]
-        states=[]
-        if len(self.memory) < 2*self.batch_size: #very early step of the program, there is a risk of overfitting
-            return
-        samples = random.sample(self.memory, self.batch_size)
-        for sample in samples:
-            state, action, reward, new_state, done = sample
-            target = self.target_model.predict(state.reshape((1,)+state.shape)) #predicted score for each action for our network, obtained with the "stable" model for stability issues
-            if done:
-                #print(target[0], reward) #this is a very good indicator of whether the algorithm is converging or not. for pong both the value in target should be almost equal to the reward
-                #target[0][action] = reward #this is what we would expect in a dqn, but in the case of pong, it can be replaced by the 2 nex lines
-                target[0][0] = reward
-                target[0][1] = reward
-            else:
-                Q_future = max(self.target_model.predict(new_state.reshape((1,)+state.shape))[0]) #the estimated max score we can get from the next state, obtained with the "stable" model for stability issues
-                target[0][action] = reward + Q_future * self.gamma #the estimated score of our action is what we gained + what we can get next with a discount
-            targets.append(target[0])
-            states.append(state)
-        self.model.fit(np.array(states), np.array(targets), epochs=1, batch_size=self.batch_size, verbose=0)
-        
-    def quick_replay(self): #a version of replay for quickstart
-        while len(self.memory)>0:
-            state, action, reward, new_state, done = self.memory.pop()
-            target = self.model.predict(state.reshape((1,)+state.shape)) #predicted score for each action for our network, obtained with the "stable" model for stability issues
-            if(reward==-10):
-                print(target[0][action]-reward)
-            target[0][action] = reward
-            self.model.fit(state.reshape((1,)+state.shape), target, epochs=1, verbose=0)
-        
-        
-    def act(self, state, env):#chose the action to take
-        predict=self.model.predict(state)[0]
-        if self.mode==2: #mode where we always play the estimated best action
-            return np.argmax(predict)
-        elif self.mode==0: #mode where we sometime play randomly
-            self.epsilon *= self.epsilon_decay #we decay epsilon
-            self.epsilon = max(self.epsilon_min, self.epsilon) #unless it is already at its min
-            if np.random.random() < self.epsilon:
-                return np.random.randint(0,2) #we play randomly one of the possible actions
-            else:
-                return np.argmax(predict) #we play the estimated best action
-        elif self.mode==1: #mode where the exploration is given by a softmax function
-            predict=np.exp(predict)
-            predict/=sum(predict)
-            aleatar=0.
-            #print(predict)
-            alea = np.random.random()
-            for i in range(len(predict)):
-                aleatar+=predict[i]
-                if(alea<=aleatar):
-                    return(i)
-                
-    def target_train(self):#copy the weight of the "fast" model to the "slow" one (see double q learning for references)
-        self.target_model.set_weights(self.model.get_weights())
+            self.actor = Model(inputs=[self.actor_weights.input, advantage, obtained_prediction], outputs=self.actor_weights.output)    
+            self.actor.compile(optimizer=Adam(lr=self.learning_rate),loss=proximal_policy_optimization_loss(advantage,obtained_prediction))
+            self.actor.summary()      
     
-    def save_model(self, fn):
-        print("saving, don't exit the program")
-        self.model.save(fn)
+    def create_actor(self): #we create the actor model, to chose the action
+        input = layers.Input(shape=(80, 80,2))
+        x = layers.Conv2D(filters=16, kernel_size=3, activation='relu', padding='same')(input)
+        x= layers.MaxPooling2D(pool_size=(4,1), strides=None, padding='same', data_format=None)(x) #the max pooling is along the height axis, so that we wont "miss" the ball
+        x = layers.Flatten()(x)
+        x= layers.Dense(32, activation="relu")(x)
+        output = layers.Dense(2, activation='softmax')(x)
+        advantage = layers.Input(shape=(1,))
+        obtained_prediction = layers.Input(shape=(2,))
+        weight_model=Model(inputs=input, outputs=output)  
+        model = Model(inputs=[input, advantage, obtained_prediction], outputs=output) #the loss_function requires advantage and prediction, so we feed them to the network but keep them unchanged
+        model.compile(optimizer=Adam(lr=self.learning_rate),loss=proximal_policy_optimization_loss(advantage,obtained_prediction))
+        model.summary()
+        return model, weight_model
+    
+    def create_critic(self):
+        input = layers.Input(shape=(80, 80,2))
+        x = layers.Conv2D(filters=16, kernel_size=3, activation='relu', padding='same')(input)
+        x= layers.MaxPooling2D(pool_size=(4,1), strides=None, padding='same', data_format=None)(x)
+        x = layers.Flatten()(x)
+        x= layers.Dense(32, activation="relu")(x)
+        output = layers.Dense(1)(x)
+        model = Model(input, output)
+        model.compile(loss="mean_squared_error", optimizer=Adam(lr=self.learning_rate)) 
+        model.summary()
+        return model
         
-def main(load=False, steps = 5000, mode=0, epsilon = 1., epsilon_min = 0.05, epsilon_decay = 0.999996, render=True, quickstart=False, steps_quickstart=500): #the function to start the program. load = whether or not to load a previous network, mode 0 : classic exploration, 1 : softmax exploration, 2: argmax, render : show the game or not (can be slower)
-    dqn_agent = DQN(load, mode, epsilon, epsilon_min, epsilon_decay)
+    def save_model(self):
+        print("saving, don't exit the program")
+        self.actor_weights.save("pong_ppo_actor.h5")#this way the actor model will save
+        self.critic.save("pong_ppo_critic.h5")
+        
+    def process_frame(self, frame): #cropped and renormalized
+        return ((frame[34:194,:,1]-72)*-1./164)[::2,::2]            
+        
+def main(load=False, steps = 20000, exploration=True, render=True): #the function to start the program. load = whether or not to load a previous network, mode 0 : classic exploration, 1 : softmax exploration, 2: argmax, render : show the game or not (can be slower)
+    ppo_agent = PPO_agent(load, exploration)
     step=0
-    if quickstart: #quickstart gives an approximation of q-learning based on the actual score instead of the theoretical minimum, but is easier to train as long as the approximation holds
-        while step<steps_quickstart:
-            done= False
-            score=0
-            cur_obs=dqn_agent.env.reset()
-            prev_obs=cur_obs
-            state=np.concatenate((((prev_obs[34:194,:,1]-72)*-1./164)[::2,::2,np.newaxis], ((cur_obs[34:194,:,1]-72)*-1./164)[::2,::2,np.newaxis]), axis=2) #we create an array containing the last two image of the game, cropped, rescaled and downsized
-            step+=1
-            while not done:
-                reward=0
-                tempmem=[]
-                while reward==0: #for pong, everytime reward!=0 can be seen as the end of a cycle
-                    if render:
-                        dqn_agent.env.render()
-                    action = dqn_agent.act(state.reshape(1,80,80,2), dqn_agent.env)
-                    cur_obs, reward, done, info = dqn_agent.env.step(action+2) #see openai gym for information
-                    state2=np.concatenate((((prev_obs[34:194,:,1]-72)*-1./164)[::2,::2,np.newaxis], ((cur_obs[34:194,:,1]-72)*-1./164)[::2,::2,np.newaxis]), axis=2) #we create an array containing the last two image of the game, cropped, rescaled and downsized
-                    tempmem.append([state, action, state2])
-                    prev_obs=cur_obs
-                    state=state2
-                score+=reward
-                for state, action, state2 in tempmem[::-1]:
-                    dqn_agent.remember(state, action,10*reward, state2, True) #done = True fix the reward to be applied instantly
-                    reward*=dqn_agent.gamma
-                del tempmem
-                dqn_agent.quick_replay() #train the model
-            dqn_agent.save_model("pong.h5")
-            print("epsilon :", dqn_agent.epsilon, "score :", score, "model saved")
-            score=0
-        del dqn_agent.memory
-        dqn_agent.memory=deque(maxlen=4000)
-        dqn_agent.target_train()
-        print("Exiting quickstart")
-    dqn_agent.model.compile(loss="mean_squared_error", optimizer=SGD(lr=dqn_agent.learning_rate/2))
-    print('Compiling the model for dqn')
-    while step<steps:
+    lastScore=-21
+    while step<steps: #number of games to play
         done= False
         score=0
-        cur_obs=dqn_agent.env.reset()
-        prev_obs=cur_obs
-        state=np.concatenate((((prev_obs[34:194,:,1]-72)*-1./164)[::2,::2,np.newaxis], ((cur_obs[34:194,:,1]-72)*-1./164)[::2,::2,np.newaxis]), axis=2) #we create an array containing the last two image of the game, cropped, rescaled and downsized
+        observation=ppo_agent.env.reset()
+        observation = ppo_agent.process_frame(observation)
+        prev_observation=observation
         step+=1
-        while not done: #while the game is not over
-            reward=0              
-            while reward==0: #for pong, everytime reward!=0 can be seen as the end of a cycle
+        while not done:
+            states_list = [] # shape = (x,80,80)
+            up_or_down_action_list=[] # [0,1] or [1,0]
+            predict_list=[]
+            reward_pred=[]
+            advantage_list=[]
+            reward_list=[]
+            reward=0
+            
+            while reward==0: #for pong, everytime reward!=0 can be seen as the end of a cycle, thus we train after them
                 if render:
-                    dqn_agent.env.render()
-                action = dqn_agent.act(state.reshape(1,80,80,2), dqn_agent.env)
-                cur_obs, reward, done, info = dqn_agent.env.step(action+2) #see openai gym for information
-                state2=np.concatenate((((prev_obs[34:194,:,1]-72)*-1./164)[::2,::2,np.newaxis], ((cur_obs[34:194,:,1]-72)*-1./164)[::2,::2,np.newaxis]), axis=2) #we create an array containing the last two image of the game, cropped, rescaled and downsized
-                dqn_agent.remember(state, action,10*reward, state2, reward!=0) #instead of giving done, giving reward!=0 is much easier for pong
-                prev_obs=cur_obs
-                state=state2
-                dqn_agent.replay() #train the model
+                    ppo_agent.env.render()
+                state = np.concatenate((prev_observation[:,:,np.newaxis], observation[:,:,np.newaxis]), axis=2) #we create an array containing the 2 last images of the game
+                states_list.append(state)
+                predicted = ppo_agent.actor.predict([state.reshape(1,80,80,2), DUMMY_VALUE, DUMMY_ACTION])[0] #DUMMY sth are required by the network but never used, this is a hack
+                predict_list.append(predicted)
+                reward_list.append(reward)
+                if exploration:
+                    alea = np.random.random()
+                    aleatar=0
+                    action=2
+                    for i in range(len(predicted)):
+                        aleatar+=predicted[i]
+                        if(alea<=aleatar):
+                            action=i+2
+                            break;
+                else:
+                    action = np.argmax(predicted)+2
+                if action==2:
+                    up_or_down_action_list.append([1,0])
+                else:
+                    up_or_down_action_list.append([0,1])
+                prev_observation=observation
+                observation, reward, done, info = ppo_agent.env.step(action) #see openai gym for information
+                observation = ppo_agent.process_frame(observation)
+            #print(predicted)
             score+=reward
-            dqn_agent.target_train() #train the "stable model"
-        dqn_agent.save_model("pong.h5")
-        print("epsilon :", dqn_agent.epsilon, "score :", score, "model saved")
+            
+            #this section does saves the step, once we have a reward
+            state = np.concatenate((prev_observation[:,:,np.newaxis], observation[:,:,np.newaxis]), axis=2)
+            states_list.append(state)
+            predicted = ppo_agent.actor.predict([state.reshape(1,80,80,2), DUMMY_VALUE, DUMMY_ACTION])[0]
+            predict_list.append(predicted)
+            reward_list.append(reward)
+            if(np.random.random()<0.5):#when reward!=0 the game is over, then no matter what we did, the outcome will be the same, but the network might train differently if this was asymetric
+                up_or_down_action_list.append([1,0])
+            else:
+                up_or_down_action_list.append([0,1])
+            
+            if(reward>0 or np.random.random()<((lastScore+22)/21)):
+                for i in range(len(states_list)-2, -1, -1):
+                    reward_list[i]+=reward_list[i+1] * ppo_agent.gamma #computed the discounted obtained reward for each step
+                x=np.array(states_list)
+                reward_array = np.reshape(np.array(reward_list), (len(reward_list), 1))
+                reward_pred = ppo_agent.critic.predict(x)
+                advantage_list=reward_array-reward_pred
+                print(reward_pred[-1])
+                pr = np.array(predict_list)
+                y_true = np.array(up_or_down_action_list) # 1 if we chose up, 0 if down
+                
+                ppo_agent.actor.fit(x=[x,advantage_list, pr],y=y_true, batch_size=advantage_list.shape[0], verbose = False)
+                ppo_agent.critic.fit(x=x, y=reward_list, verbose = False)
+        lastScore=score
+        ppo_agent.save_model()
+        print("Score: ",score," model saved")
         score=0
-    
-    dqn_agent.env.close()
+    del ppo_agent.memory
+    ppo_agent.env.close()

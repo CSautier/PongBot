@@ -40,7 +40,7 @@ class PPO_agent:
     def __init__(self, load, exploration):
         self.env = gym.make('Pong-v0')
         self.critic_learning_rate = 5e-5
-        self.actor_learning_rate = 1e-4
+        self.actor_learning_rate = 5e-5
         self.gamma=0.95
         self.exploration=exploration
         self.maxScore=-21

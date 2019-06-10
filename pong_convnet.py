@@ -43,7 +43,6 @@ class PPO_agent:
         self.actor_learning_rate = 1e-4
         self.gamma=0.95
         self.exploration=exploration
-        self.maxScore=-21
         if(not load):
             #there are 2 networks : actor and critic, as described in the PPO papers.
             self.actor, self.actor_weights = self.create_actor() #actor_weights allows us to save the network
@@ -51,27 +50,31 @@ class PPO_agent:
 
         else:
             for score in range(21,-22, -1):
-                if os.path.isfile("pong_ppo_critic_"+str(score)+".h5"):
-                    self.critic = load_model("pong_ppo_critic_"+str(score)+".h5")
+                if os.path.isfile("pong_ppo_convnet_critic_"+str(score)+".h5"):
+                    self.critic = load_model("pong_ppo_convnet_critic_"+str(score)+".h5")
                     self.critic.compile(loss="mean_squared_error", optimizer=Adam(lr=self.critic_learning_rate))
-                    self.actor_weights = load_model("pong_ppo_actor_"+str(score)+".h5")
+                    self.actor_weights = load_model("pong_ppo_convnet_actor_"+str(score)+".h5")
                     advantage = layers.Input(shape=(1,))
                     obtained_prediction = layers.Input(shape=(2,))
     
                     self.actor = Model(inputs=[self.actor_weights.input, advantage, obtained_prediction], outputs=self.actor_weights.output)
                     self.actor.compile(optimizer=Adam(lr=self.actor_learning_rate),loss=proximal_policy_optimization_loss(advantage,obtained_prediction))
                     self.actor.summary()
-                    self.maxScore=score
                     break
 
     def create_actor(self): #we create the actor model, to chose the action
         input = layers.Input(shape=(80, 80,2))
-        x = layers.Conv2D(filters=16, kernel_size=3, activation='relu', padding='same')(input)
-        #x= layers.MaxPooling2D(pool_size=(4,1), strides=None, padding='same', data_format=None)(x) #the max pooling is along the height axis, so that we wont "miss" the ball
+        x = layers.Conv2D(filters=8, kernel_size=3, activation='relu', padding='same')(input)
+        x = layers.MaxPooling2D(pool_size=(2,2), strides=None, padding='same', data_format=None)(x)
+        x = layers.Conv2D(filters=16, kernel_size=3, activation='relu', padding='same')(x)
+        x = layers.MaxPooling2D(pool_size=(2,2), strides=None, padding='same', data_format=None)(x)
+        x = layers.Conv2D(filters=20, kernel_size=3, activation='relu', padding='same')(x)
+        x = layers.MaxPooling2D(pool_size=(2,2), strides=None, padding='same', data_format=None)(x)
+        x = layers.Conv2D(filters=24, kernel_size=3, activation='relu', padding='same')(x)
+        x = layers.MaxPooling2D(pool_size=(2,2), strides=None, padding='same', data_format=None)(x)
+        x = layers.Conv2D(filters=24, kernel_size=3, activation='relu', padding='same')(x)
         x = layers.Flatten()(x)
-        x= layers.Dense(32, activation="relu")(x)
-        x= layers.Dense(32, activation="relu")(x)
-        x= layers.Dense(32, activation="relu")(x)
+        x= layers.Dense(24, activation="relu")(x)
         output = layers.Dense(2, activation='softmax')(x)
         advantage = layers.Input(shape=(1,))
         obtained_prediction = layers.Input(shape=(2,))
@@ -83,12 +86,17 @@ class PPO_agent:
 
     def create_critic(self):
         input = layers.Input(shape=(80, 80,2))
-        x = layers.Conv2D(filters=16, kernel_size=3, activation='relu', padding='same')(input)
-        #x= layers.MaxPooling2D(pool_size=(4,1), strides=None, padding='same', data_format=None)(x)
+        x = layers.Conv2D(filters=8, kernel_size=3, activation='relu', padding='same')(input)
+        x = layers.MaxPooling2D(pool_size=(2,2), strides=None, padding='same', data_format=None)(x)
+        x = layers.Conv2D(filters=16, kernel_size=3, activation='relu', padding='same')(x)
+        x = layers.MaxPooling2D(pool_size=(2,2), strides=None, padding='same', data_format=None)(x)
+        x = layers.Conv2D(filters=20, kernel_size=3, activation='relu', padding='same')(x)
+        x = layers.MaxPooling2D(pool_size=(2,2), strides=None, padding='same', data_format=None)(x)
+        x = layers.Conv2D(filters=24, kernel_size=3, activation='relu', padding='same')(x)
+        x = layers.MaxPooling2D(pool_size=(2,2), strides=None, padding='same', data_format=None)(x)
+        x = layers.Conv2D(filters=24, kernel_size=3, activation='relu', padding='same')(x)
         x = layers.Flatten()(x)
-        x= layers.Dense(32, activation="relu")(x)
-        x= layers.Dense(32, activation="relu")(x)
-        x= layers.Dense(32, activation="relu")(x)
+        x= layers.Dense(24, activation="relu")(x)
         output = layers.Dense(1)(x)
         model = Model(input, output)
         model.compile(loss="mean_squared_error", optimizer=Adam(lr=self.critic_learning_rate))
@@ -97,8 +105,8 @@ class PPO_agent:
 
     def save_model(self, score):
         print("saving, don't exit the program")
-        self.actor_weights.save("pong_ppo_actor_"+str(score)+".h5")#this way the actor model will save
-        self.critic.save("pong_ppo_critic_"+str(score)+".h5")
+        self.actor_weights.save("pong_ppo_convnet_actor_"+str(score)+".h5")#this way the actor model will save
+        self.critic.save("pong_ppo_convnet_critic_"+str(score)+".h5")
 
     def process_frame(self, frame): #cropped and renormalized
         return ((frame[34:194,:,1]-72)*-1./164)[::2,::2]
@@ -107,7 +115,7 @@ def main(load=False, steps = 20000, exploration=True, render=True): #the functio
     ppo_agent = PPO_agent(load, exploration)
     step=0
     lastScore=-21
-    ppo_agent.maxScore=-21
+    maxScore=-21
     while step<steps: #number of games to play
         done= False
         score=0
@@ -178,10 +186,10 @@ def main(load=False, steps = 20000, exploration=True, render=True): #the functio
                 ppo_agent.actor.fit(x=[x,advantage_list, pr],y=y_true, batch_size=advantage_list.shape[0], verbose = False)
                 ppo_agent.critic.fit(x=x, y=reward_list, batch_size=advantage_list.shape[0], epochs=8, verbose = False)
         lastScore=int(score)
-        if lastScore>ppo_agent.maxScore:
-            ppo_agent.maxScore=lastScore
+        if lastScore>maxScore:
+            maxScore=lastScore
         if step%5==0:
-            ppo_agent.save_model(ppo_agent.maxScore)
+            ppo_agent.save_model(maxScore)
         print("Score: ",lastScore)
         score=0
     ppo_agent.env.close()

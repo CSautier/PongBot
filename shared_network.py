@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+
+#this is a modification of the main code, to make the two networks share part of their weights
 import gym
 from tensorflow.keras import layers
 from tensorflow.keras import Model
@@ -32,67 +34,54 @@ class PPO_agent:
         self.maxScore=-21
         if(not load):
             #there are 2 networks : actor and critic, as described in the PPO papers.
-            self.actor, self.actor_weights = self.create_actor() #actor_weights allows us to save the network
-            self.critic = self.create_critic()
+            self.actor, self.actor_weights, self.critic = self.create_models() #actor_weights allows us to save the network
 
         else:
+            self.actor, self.actor_weights, self.critic = self.create_models()
             for score in range(21,-22, -1):
-                if os.path.isfile("pong_ppo_critic_"+str(score)+".h5"):#check the best score and load it
-                    self.critic = load_model("pong_ppo_critic_"+str(score)+".h5")
+                if os.path.isfile("pong_ppo_shared_actor_"+str(score)+".h5"):
+                    self.actor_weights.set_weights(load_model("pong_ppo_shared_actor_"+str(score)+".h5").get_weights())
+                    self.critic.set_weights(load_model("pong_ppo_shared_critic_"+str(score)+".h5").get_weights())
                     self.critic.compile(loss="mean_squared_error", optimizer=Adam(lr=self.critic_learning_rate))
-                    self.actor_weights = load_model("pong_ppo_actor_"+str(score)+".h5")
                     advantage = layers.Input(shape=(1,))
                     obtained_prediction = layers.Input(shape=(2,))
-    
-                    self.actor = Model(inputs=[self.actor_weights.input, advantage, obtained_prediction], outputs=self.actor_weights.output) #keras does not load the loss function, so we have to recreate it
+                    self.actor = Model(inputs=[self.actor_weights.input, advantage, obtained_prediction], outputs=self.actor_weights.output)
                     self.actor.compile(optimizer=Adam(lr=self.actor_learning_rate),loss=proximal_policy_optimization_loss(advantage,obtained_prediction))
-                    self.actor.summary()
                     self.maxScore=score
                     break
 
-    def create_actor(self): #create the actor model, to chose the action
+    def create_models(self): #we create the actor model, to chose the action
         input = layers.Input(shape=(80, 80,2))
         x = layers.Conv2D(filters=8, kernel_size=5, activation='relu', padding='same')(input)
-        #x= layers.MaxPooling2D(pool_size=(4,1), strides=None, padding='valid', data_format=None)(x) #the max pooling is along the height axis, so that we wont "miss" the ball
         x = layers.Flatten()(x)
         x= layers.Dense(20, activation="relu")(x)
         x= layers.Dense(20, activation="relu")(x)
-        x= layers.Dense(20, activation="relu")(x)
-        x= layers.Dense(20, activation="relu")(x)
-        x= layers.Dense(20, activation="relu")(x)
+        mid_output= layers.Dense(20, activation="relu")(x)
+        x= layers.Dense(20, activation="relu")(mid_output)
         x= layers.Dense(20, activation="relu")(x)
         output = layers.Dense(2, activation='softmax')(x)
         advantage = layers.Input(shape=(1,))
         obtained_prediction = layers.Input(shape=(2,))
-        weight_model=Model(inputs=input, outputs=output)
-        model = Model(inputs=[input, advantage, obtained_prediction], outputs=output) #the loss_function requires advantage and prediction, so we feed them to the network but keep them unchanged
-        model.compile(optimizer=Adam(lr=self.actor_learning_rate),loss=proximal_policy_optimization_loss(advantage,obtained_prediction))
-        model.summary()
-        return model, weight_model
-
-    def create_critic(self): 
-        input = layers.Input(shape=(80, 80,2))
-        x = layers.Conv2D(filters=8, kernel_size=5, activation='relu', padding='same')(input)
-        #x= layers.MaxPooling2D(pool_size=(4,1), strides=None, padding='valid', data_format=None)(x) #the max pooling is along the height axis, so that we wont "miss" the ball
-        x = layers.Flatten()(x)
-        x= layers.Dense(20, activation="relu")(x)
-        x= layers.Dense(20, activation="relu")(x)
-        x= layers.Dense(20, activation="relu")(x)
-        x= layers.Dense(20, activation="relu")(x)
-        x= layers.Dense(20, activation="relu")(x)
+        weight_actor=Model(inputs=input, outputs=output)
+        actor = Model(inputs=[input, advantage, obtained_prediction], outputs=output) #the loss_function requires advantage and prediction, so we feed them to the network but keep them unchanged
+        actor.compile(optimizer=Adam(lr=self.actor_learning_rate),loss=proximal_policy_optimization_loss(advantage,obtained_prediction))
+        actor.summary()
+        
+        x= layers.Dense(20, activation="relu")(mid_output)
         x= layers.Dense(20, activation="relu")(x)
         output = layers.Dense(1)(x)
-        model = Model(input, output)
-        model.compile(loss="mean_squared_error", optimizer=Adam(lr=self.critic_learning_rate))
-        model.summary()
-        return model
+        critic = Model(input, output)
+        critic.compile(loss="mean_squared_error", optimizer=Adam(lr=self.critic_learning_rate))
+        critic.summary()
+        
+        return actor, weight_actor, critic
 
     def save_model(self, score):
         print("saving, don't exit the program")
-        self.actor_weights.save("pong_ppo_actor_"+str(score)+".h5")#this way the actor model will save
-        self.critic.save("pong_ppo_critic_"+str(score)+".h5")
+        self.actor_weights.save("pong_ppo_shared_actor_"+str(score)+".h5")#this way the actor model will save
+        self.critic.save("pong_ppo_shared_critic_"+str(score)+".h5")
 
-    def process_frame(self, frame): #crop and renormalize a frame
+    def process_frame(self, frame): #cropped and renormalized
         return ((frame[34:194,:,1]-72)*-1./164)[::2,::2]
 
 def main(load=False, steps = 20000, render=False): #the function to start the program. load = whether or not to load a previously trained network, render : show the game or not (can be slower)
@@ -114,7 +103,7 @@ def main(load=False, steps = 20000, render=False): #the function to start the pr
             advantage_list=[]
             reward_list=[]
             reward=0
-
+            
             while reward==0: #for pong, everytime reward!=0 can be seen as the end of a cycle, thus we train after them
                 if render:
                     ppo_agent.env.render()

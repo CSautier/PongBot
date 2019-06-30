@@ -12,7 +12,7 @@ import numpy as np
 import os.path
 
 LOSS_CLIPPING=0.1
-ENTROPY_LOSS = 1e-2
+ENTROPY_LOSS = 1e-3
 DUMMY_ACTION, DUMMY_VALUE = np.zeros((1, 2)), np.zeros((1, 1))
 
 def proximal_policy_optimization_loss(advantage, old_prediction):#this is the clipped PPO loss function, see https://arxiv.org/pdf/1707.06347.pdf
@@ -20,7 +20,7 @@ def proximal_policy_optimization_loss(advantage, old_prediction):#this is the cl
         prob = y_true * y_pred
         old_prob = y_true * old_prediction
         r = prob/(old_prob + 1e-10)
-        return -K.mean(K.clip(r, min_value=1 - LOSS_CLIPPING, max_value=1 + LOSS_CLIPPING) * advantage + ENTROPY_LOSS * -(prob * K.log(K.clip(prob, K.epsilon(), 1-K.epsilon()))))
+        return -K.mean(K.minimum(r * advantage, K.clip(r, min_value=1 - LOSS_CLIPPING, max_value=1 + LOSS_CLIPPING) * advantage) + ENTROPY_LOSS * -(prob * K.log(K.clip(prob, K.epsilon(), 1-K.epsilon()))))
     return loss
 
 class PPO_agent:

@@ -89,7 +89,6 @@ class Generator(Sequence):
 
     def __getitem__(self, index):
         'Generate one batch of data'
-        # Generate indexes of the batch
         if self.done:
             print(int(self.score))
             if int(self.score)>self.ppo_agent.maxScore:
@@ -135,17 +134,12 @@ class Generator(Sequence):
         x=np.array(states_list)
         reward_array = np.reshape(np.array(reward_list), (len(reward_list), 1))
         reward_pred = self.ppo_agent.ppo_net.predict([x, np.zeros((len(states_list), 1)), np.zeros((len(states_list), 2))])#[1]
-#        print(reward_pred)
         reward_pred=reward_pred[1]
         advantage_list=reward_array-reward_pred
-#        print(reward_pred[-1])  #this print is useful to see if the net converges
-#            print(predict_list[len(predict_list)//2]) #this print is useful to see if the actor is not too extreme, or not learning anything
         pr = np.array(predict_list)
         y_true = np.array(up_or_down_action_list) # 1 if we chose up, 0 if down
         X=[x,advantage_list, pr]
         y={'critic' : np.array(reward_list),'actor' :  np.array(y_true)}
-#        ppo_agent.actor.fit(x=[x,advantage_list, pr],y=y_true, batch_size=16, verbose = False) #fit the networks
-#        ppo_agent.critic.fit(x=x, y=reward_list, batch_size=16, epochs=1, verbose = False)
         return X, y
 
 
@@ -155,8 +149,4 @@ class Generator(Sequence):
 def main(load=False, steps = 20000, render=False): #the function to start the program. load = whether or not to load a previously trained network, render : show the game or not (can be slower)
     ppo_agent = PPO_agent(load)
     generator=Generator(render, ppo_agent)
-    ppo_agent.ppo_net.fit_generator(generator=generator,  steps_per_epoch=1, epochs=20000, use_multiprocessing=True, workers=0, verbose=2)#, callbacks = callbacks)
-#        ppo_agent.save_model(ppo_agent.maxScore)
-#        print("Score: ",lastScore)
-#        score=0
-#    ppo_agent.env.close()
+    ppo_agent.ppo_net.fit_generator(generator=generator,  steps_per_epoch=1, epochs=20000, use_multiprocessing=True, workers=0, verbose=2)

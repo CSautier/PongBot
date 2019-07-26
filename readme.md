@@ -1,10 +1,10 @@
-# Multiprocessing PPO with Keras to implement OpenAi's Pong
+# Multiprocessed Keras PPO bot playing Pong on OpenAI's gym
 
-## This code is a **PPO** implementation of a bot playing Atari Pong from game images.
+## This code is a **PPO** implementation of a bot playing Atari Pong from game images
 ### The net is written for Keras (using Tensorflow backend, but this is easily modified)
 
 ![Actual Result of the bot](https://github.com/CSautier/PongBot/gifs/demo.gif)
-My bot plays in green (right).
+My bot plays in green (right)
 
 ## Requirements
 
@@ -48,5 +48,5 @@ This means you are trying to load a pretrained weight without actually having on
 * https://arxiv.org/pdf/1707.06347.pdf
 
 
-**Feel free to use as much of this code as you want but mention my github if you found this useful**  
+**Feel free to use as much of this code as you want but mention my github if you found this useful**.  
 **For more information, you can contact me on my github.**

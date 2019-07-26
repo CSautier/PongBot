@@ -126,7 +126,10 @@ class Generator():
             self.prev_observation=self.observation
             self.observation, reward, self.done, info = self.env.step(action) #compute the next step of the game, see openai gym for information
             self.observation = self.process_frame(self.observation)
-            reward_list.append(reward)
+            if action==1:
+                reward_list.append(reward*0.1+0.001)
+            else:
+                reward_list.append(reward*0.1)
         self.score+=reward
         for i in range(len(states_list)-2, -1, -1):
             reward_list[i]+=reward_list[i+1] * self.gamma #compute the discounted obtained reward for each step

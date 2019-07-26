@@ -30,7 +30,7 @@ Launch the game with the *load* option: `python PongBot.py --load True`
 ## What to expect of the training
 
 I've got a GTX 1060, and can run 5 processes at once. If your GPU has more memory than mine (3Gb) you can increase the number of processes: `python PongBot.py --processes 10` (for instance).
-You will get the feeling of some progress in about an hour, but it takes approximately a day to really train the net.
+You will get the feeling of some progress in about an hour, but it takes approximately 3 hours until you actually win some games and a day to really train the net.
 
 ## I get a *Cuda Memory Error*
 

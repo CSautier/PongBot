@@ -12,21 +12,21 @@ import matplotlib.pyplot as plt
 from matplotlib import animation
 
 
-import tensorflow as tf
-import tensorflow.keras.backend as K
-num_cores = 1
-num_CPU = 1
-num_GPU = 0
-config = tf.ConfigProto(intra_op_parallelism_threads=num_cores,
-                        inter_op_parallelism_threads=num_cores, 
-                        allow_soft_placement=True,
-                        device_count = {'CPU' : num_CPU,'GPU' : num_GPU})
-session = tf.Session(config=config)
-K.set_session(session)
+#import tensorflow as tf
+#import tensorflow.keras.backend as K
+#num_cores = 1
+#num_CPU = 1
+#num_GPU = 1
+#config = tf.ConfigProto(intra_op_parallelism_threads=num_cores,
+#                        inter_op_parallelism_threads=num_cores, 
+#                        allow_soft_placement=True,
+#                        device_count = {'CPU' : num_CPU,'GPU' : num_GPU})
+#session = tf.Session(config=config)
+#K.set_session(session)
 
 for score in range(21,-22, -1):
-    if os.path.isfile("pong_ppo_multiproc_"+str(score)+".h5"):
-        ppo_net = create_model("pong_ppo_multiproc_"+str(score)+".h5")
+    if os.path.isfile("pong_ppo_"+str(score)+".h5"):
+        ppo_net = create_model("pong_ppo_"+str(score)+".h5")
         break
     
 try: ppo_net
@@ -74,12 +74,12 @@ while not done: #for pong, everytime reward!=0 can be seen as the end of a cycle
     alea = np.random.random()
     aleatar=0
     action=1
-#    for i in range(len(predicted)): #chose randomly an action according to the probability distribution given by the softmax
-#        aleatar+=predicted[i]
-#        if(alea<=aleatar):
-#            action=i+1
-#            break;
-    action=np.argmax(predicted)+1
+    for i in range(len(predicted)): #chose randomly an action according to the probability distribution given by the softmax
+        aleatar+=predicted[i]
+        if(alea<=aleatar):
+            action=i+1
+            break;
+#    action=np.argmax(predicted)+1
     prev_observation=observation
     observation, reward, done, info = env.step(action) #compute the next step of the game, see openai gym for information
     frames.append(observation)

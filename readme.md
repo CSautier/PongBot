@@ -12,7 +12,7 @@ My bot plays in green (right)
 * Numpy
 * gym (Atari)
 * multiprocessing
-* ffmpeg or Pillow if you want to create gifs of the game
+* matplotlib and ffmpeg or Pillow if you want to create gifs of the game
 
 ### The code has only been tested with
 * Python 3.7
@@ -20,7 +20,7 @@ My bot plays in green (right)
 
 ## How to begin the training
 
-* Clone this repository: `git clone `
+* Clone this repository: `git clone https://github.com/CSautier/PongBot`
 * Launche the game: `python PongBot.py`
 
 ## How to resume the training

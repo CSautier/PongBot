@@ -11,6 +11,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import animation
 
+
+import tensorflow as tf
+import tensorflow.keras.backend as K
+num_cores = 1
+num_CPU = 1
+num_GPU = 0
+config = tf.ConfigProto(intra_op_parallelism_threads=num_cores,
+                        inter_op_parallelism_threads=num_cores, 
+                        allow_soft_placement=True,
+                        device_count = {'CPU' : num_CPU,'GPU' : num_GPU})
+session = tf.Session(config=config)
+K.set_session(session)
+
 for score in range(21,-22, -1):
     if os.path.isfile("pong_ppo_multiproc_"+str(score)+".h5"):
         ppo_net = create_model("pong_ppo_multiproc_"+str(score)+".h5")
@@ -30,15 +43,20 @@ def display_frames_as_gif(frames):
         plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
         def animate(i):
             patch.set_data(frames[i])
-        anim = animation.FuncAnimation(plt.gcf(), animate, frames = len(frames), interval=30)
-    #    anim.save('gifs/test.gif')
-        FFwriter = animation.FFMpegWriter(extra_args=['-vcodec', 'libx264'], fps=30)
-        anim.save('movies/gameplay.mp4', writer = FFwriter)
+        anim = animation.FuncAnimation(plt.gcf(), animate, frames = len(frames), interval=33)
+        anim.save('gifs/gameplay.gif')
     except:
-        plt.rcParams['animation.ffmpeg_path'] = '/usr/bin/ffmpeg'
+        plt.figure(figsize=(frames[0].shape[1] / 72.0, frames[0].shape[0] / 72.0), dpi = 72)
+        patch = plt.imshow(frames[0])
+        plt.axis('off')
+        plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+        def animate(i):
+            patch.set_data(frames[i])
+        anim = animation.FuncAnimation(plt.gcf(), animate, frames = len(frames), interval=33)
+        anim.save('gifs/gameplay.gif', writer=animation.PillowWriter(fps=40))
         
         
-DUMMY_ACTION, DUMMY_VALUE = np.zeros((1, 2)), np.zeros((1, 1))
+DUMMY_ACTION, DUMMY_VALUE = np.zeros((1, 3)), np.zeros((1, 1))
 
 def process_frame(frame): #cropped and renormalized
     return ((frame[34:194,:,1]-72)*-1./164)[::2,::2]
@@ -55,12 +73,13 @@ while not done: #for pong, everytime reward!=0 can be seen as the end of a cycle
     predicted = ppo_net.predict([state.reshape(1,80,80,2), DUMMY_VALUE, DUMMY_ACTION])[0][0] #DUMMY sth are required by the network but never used, this is a hack
     alea = np.random.random()
     aleatar=0
-    action=2
-    for i in range(len(predicted)): #chose randomly an action according to the probability distribution given by the softmax
-        aleatar+=predicted[i]
-        if(alea<=aleatar):
-            action=i+2
-            break;
+    action=1
+#    for i in range(len(predicted)): #chose randomly an action according to the probability distribution given by the softmax
+#        aleatar+=predicted[i]
+#        if(alea<=aleatar):
+#            action=i+1
+#            break;
+    action=np.argmax(predicted)+1
     prev_observation=observation
     observation, reward, done, info = env.step(action) #compute the next step of the game, see openai gym for information
     frames.append(observation)

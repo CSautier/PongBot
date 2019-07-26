@@ -33,7 +33,7 @@ parser.add_argument('--queue_size', default=256, help='Size of queue holding age
 
 LOSS_CLIPPING=0.1
 ENTROPY_LOSS = 1e-3
-DUMMY_ACTION, DUMMY_VALUE = np.zeros((1, 2)), np.zeros((1, 1))
+DUMMY_ACTION, DUMMY_VALUE = np.zeros((1, 3)), np.zeros((1, 1))
 
 def proximal_policy_optimization_loss(advantage, old_prediction):#this is the clipped PPO loss function, see https://arxiv.org/pdf/1707.06347.pdf
     def loss(y_true, y_pred):
@@ -45,7 +45,7 @@ def proximal_policy_optimization_loss(advantage, old_prediction):#this is the cl
 
 def create_model(weights=None):
     advantage = layers.Input(shape=(1,))
-    obtained_prediction = layers.Input(shape=(2,))
+    obtained_prediction = layers.Input(shape=(3,))
     
     input = layers.Input(shape=(80, 80,2))
     x = layers.Conv2D(filters=8, kernel_size=5, activation='relu', padding='valid')(input)
@@ -55,7 +55,7 @@ def create_model(weights=None):
     mid_output= layers.Dense(20, activation="relu")(x)
     x= layers.Dense(20, activation="relu")(mid_output)
     x= layers.Dense(20, activation="relu")(x)
-    actor = layers.Dense(2, activation='softmax', name='actor')(x)
+    actor = layers.Dense(3, activation='softmax', name='actor')(x)
     
     x= layers.Dense(20, activation="relu")(mid_output)
     x= layers.Dense(20, activation="relu")(x)
@@ -69,7 +69,7 @@ def create_model(weights=None):
             ppo_net.load_weights(weights)
         else:
             ppo_net.set_weights(weights)
-    ppo_net.summary()
+#    ppo_net.summary()
     return ppo_net
 
 class Generator():
@@ -100,7 +100,7 @@ class Generator():
             self.observation = self.process_frame(self.observation)
             self.prev_observation=self.observation
         states_list = [] # shape = (x,80,80)
-        up_or_down_action_list=[] # [0,1] or [1,0]
+        action_list=[] # [0,1] or [1,0]
         predict_list=[]
         reward_pred=[]
         advantage_list=[]
@@ -115,16 +115,14 @@ class Generator():
             predict_list.append(predicted)
             alea = np.random.random()
             aleatar=0
-            action=2
+            action=1
             for i in range(len(predicted)): #chose randomly an action according to the probability distribution given by the softmax
                 aleatar+=predicted[i]
                 if(alea<=aleatar):
-                    action=i+2
+                    action=i+1
                     break;
-            if action==2:
-                up_or_down_action_list.append([1,0])
-            else:
-                up_or_down_action_list.append([0,1])
+            action_list.append([0,0,0])
+            action_list[-1][action-1]=1
             self.prev_observation=self.observation
             self.observation, reward, self.done, info = self.env.step(action) #compute the next step of the game, see openai gym for information
             self.observation = self.process_frame(self.observation)
@@ -134,11 +132,11 @@ class Generator():
             reward_list[i]+=reward_list[i+1] * self.gamma #compute the discounted obtained reward for each step
         x=np.array(states_list)
         reward_array = np.reshape(np.array(reward_list), (len(reward_list), 1))
-        reward_pred = self.ppo_net.predict([x, np.zeros((len(states_list), 1)), np.zeros((len(states_list), 2))])#[1]
+        reward_pred = self.ppo_net.predict([x, np.zeros((len(states_list), 1)), np.zeros((len(states_list), 3))])#[1]
         reward_pred=reward_pred[1]
         advantage_list=reward_array-reward_pred
         pr = np.array(predict_list)
-        y_true = np.array(up_or_down_action_list) # 1 if we chose up, 0 if down
+        y_true = np.array(action_list) # 1 if we chose up, 0 if down
         X=[x,advantage_list, pr]
         y={'critic' : np.array(reward_list),'actor' :  np.array(y_true)}
         return X, y
@@ -152,32 +150,33 @@ def train_proc(mem_queue, weight_dict, render):
         #this block enables GPU enabled multiprocessing
         core_config = tf.ConfigProto()
         core_config.gpu_options.allow_growth = True
+        tf.logging.set_verbosity(tf.logging.ERROR)
         #allow_growth tells cuda not to use as much VRAM as it wants (as we nneed extra ram for all the other processes)
-        session = tf.Session(config=core_config)
-        K.set_session(session)
-        
-        #counter of the current version of the weights
-        update=0
-        #load the initial weights
-        ppo_net = create_model(weight_dict['weights'])
-        #a generator that plays a game and returns a batch
-        gen = Generator(render, ppo_net)
-        while True:
-            #check for a new update
-            if weight_dict['update']>update:
-#                print('updating player net')
-                #set the counter to the new version
-                update=weight_dict['update']
-                #update the weights
-                ppo_net.set_weights(weight_dict['weights'])
-            #stores the weights
-            mem_queue.put(gen[0])
-            #if we otained the best score so far, store it in the shared memory
-            if gen.maxScore>weight_dict['maxScore']:
-                weight_dict['maxScore']=gen.maxScore
-
-        session.close()
-        K.clear_session()
+        with tf.Session(config=core_config) as session:
+            K.set_session(session)
+            
+            #counter of the current version of the weights
+            update=0
+            #load the initial weights
+            ppo_net = create_model(weight_dict['weights'])
+            #a generator that plays a game and returns a batch
+            gen = Generator(render, ppo_net)
+            while True:
+                #check for a new update
+                if weight_dict['update']>update:
+    #                print('updating player net')
+                    #set the counter to the new version
+                    update=weight_dict['update']
+                    #update the weights
+                    ppo_net.set_weights(weight_dict['weights'])
+                #stores the weights
+                mem_queue.put(gen[0])
+                #if we otained the best score so far, store it in the shared memory
+                if gen.maxScore>weight_dict['maxScore']:
+                    weight_dict['maxScore']=gen.maxScore
+    
+            session.close()
+            K.clear_session()
     except Exception as e: print(e)
 
 
@@ -191,7 +190,7 @@ def learn_proc(mem_queue, weight_dict, load, swap_freq=10):
         core_config = tf.ConfigProto()
         #allow_growth tells cuda not to use as much VRAM as it wants (as we nneed extra ram for all the other processes)
         core_config.gpu_options.allow_growth = True
-        session = tf.Session(config=core_config)
+        tf.logging.set_verbosity(tf.logging.ERROR)
         with tf.Session(config=core_config) as session:
             K.set_session(session)
             #whether or not to load a previous network
@@ -201,8 +200,8 @@ def learn_proc(mem_queue, weight_dict, load, swap_freq=10):
             else:
                 #load the network that scored the best so far
                 for score in range(21,-22, -1):
-                    if os.path.isfile("pong_ppo_multiproc_"+str(score)+".h5"):
-                        ppo_net = create_model("pong_ppo_multiproc_"+str(score)+".h5")
+                    if os.path.isfile("pong_ppo_"+str(score)+".h5"):
+                        ppo_net = create_model("pong_ppo_"+str(score)+".h5")
                         weight_dict['maxScore']=score
                         break
                 try: ppo_net
@@ -221,7 +220,7 @@ def learn_proc(mem_queue, weight_dict, load, swap_freq=10):
                 weight_dict['weights']=ppo_net.get_weights()
                 weight_dict['update']+=1
                 #save the weights in a file, to load it later. The file contains the best score ever obtained
-                ppo_net.save_weights("pong_ppo_multiproc_{}.h5".format(weight_dict['maxScore']))
+                ppo_net.save_weights("pong_ppo_{}.h5".format(weight_dict['maxScore']))
     except Exception as e: print(e)
  
 def init_worker():

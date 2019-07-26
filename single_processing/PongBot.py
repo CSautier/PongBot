@@ -27,7 +27,7 @@ parser.add_argument('--render', default=True, help='Whether or not show the game
 
 LOSS_CLIPPING=0.1
 ENTROPY_LOSS = 1e-3
-DUMMY_ACTION, DUMMY_VALUE = np.zeros((1, 2)), np.zeros((1, 1))
+DUMMY_ACTION, DUMMY_VALUE = np.zeros((1, 3)), np.zeros((1, 1))
 
 def proximal_policy_optimization_loss(advantage, old_prediction):#this is the clipped PPO loss function, see https://arxiv.org/pdf/1707.06347.pdf
     def loss(y_true, y_pred):
@@ -53,7 +53,7 @@ class PPO_agent:
             except: raise Exception('You need a pretrained net to do this')
     def create_model(self, lr, load_model=None):
         advantage = layers.Input(shape=(1,))
-        obtained_prediction = layers.Input(shape=(2,))
+        obtained_prediction = layers.Input(shape=(3,))
         
         input = layers.Input(shape=(80, 80,2))
         x = layers.Conv2D(filters=8, kernel_size=5, activation='relu', padding='valid')(input)
@@ -63,7 +63,7 @@ class PPO_agent:
         mid_output= layers.Dense(20, activation="relu")(x)
         x= layers.Dense(20, activation="relu")(mid_output)
         x= layers.Dense(20, activation="relu")(x)
-        actor = layers.Dense(2, activation='softmax', name='actor')(x)
+        actor = layers.Dense(3, activation='softmax', name='actor')(x)
 
         
         x= layers.Dense(20, activation="relu")(mid_output)
@@ -114,7 +114,7 @@ class Generator(Sequence):
             self.observation = self.process_frame(self.observation)
             self.prev_observation=self.observation
         states_list = [] # shape = (x,80,80)
-        up_or_down_action_list=[] # [0,1] or [1,0]
+        action_list=[] # [0,1] or [1,0]
         predict_list=[]
         reward_pred=[]
         advantage_list=[]
@@ -129,16 +129,14 @@ class Generator(Sequence):
             predict_list.append(predicted)
             alea = np.random.random()
             aleatar=0
-            action=2
+            action=1
             for i in range(len(predicted)): #chose randomly an action according to the probability distribution given by the softmax
                 aleatar+=predicted[i]
                 if(alea<=aleatar):
-                    action=i+2
+                    action=i+1
                     break;
-            if action==2:
-                up_or_down_action_list.append([1,0])
-            else:
-                up_or_down_action_list.append([0,1])
+            action_list.append([0,0,0])
+            action_list[-1][action-1]=1
             self.prev_observation=self.observation
             self.observation, reward, self.done, info = self.env.step(action) #compute the next step of the game, see openai gym for information
             self.observation = self.process_frame(self.observation)
@@ -148,11 +146,11 @@ class Generator(Sequence):
             reward_list[i]+=reward_list[i+1] * self.gamma #compute the discounted obtained reward for each step
         x=np.array(states_list)
         reward_array = np.reshape(np.array(reward_list), (len(reward_list), 1))
-        reward_pred = self.ppo_agent.ppo_net.predict([x, np.zeros((len(states_list), 1)), np.zeros((len(states_list), 2))])#[1]
+        reward_pred = self.ppo_agent.ppo_net.predict([x, np.zeros((len(states_list), 1)), np.zeros((len(states_list), 3))])#[1]
         reward_pred=reward_pred[1]
         advantage_list=reward_array-reward_pred
         pr = np.array(predict_list)
-        y_true = np.array(up_or_down_action_list) # 1 if we chose up, 0 if down
+        y_true = np.array(action_list) # 1 if we chose up, 0 if down
         X=[x,advantage_list, pr]
         y={'critic' : np.array(reward_list),'actor' :  np.array(y_true)}
         return X, y

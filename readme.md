@@ -3,7 +3,7 @@
 ## This code is a **PPO** implementation of a bot playing Atari Pong from game images
 ### The net is written for Keras (using Tensorflow backend, but this is easily modified)
 
-![Actual Result of the bot](https://github.com/CSautier/PongBot/gifs/demo.gif)
+![Actual Result of the bot](https://github.com/CSautier/PongBot/tree/master/gifs/demo.gif)
 My bot plays in green (right)
 
 ## Requirements

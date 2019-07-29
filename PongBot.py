@@ -32,7 +32,7 @@ parser.add_argument('--queue_size', default=256, help='Size of queue holding age
                     type=int)
 
 LOSS_CLIPPING=0.1
-ENTROPY_LOSS = 1e-3
+ENTROPY_LOSS = 1e-4
 DUMMY_ACTION, DUMMY_VALUE = np.zeros((1, 3)), np.zeros((1, 1))
 
 def proximal_policy_optimization_loss(advantage, old_prediction):#this is the clipped PPO loss function, see https://arxiv.org/pdf/1707.06347.pdf
@@ -80,7 +80,7 @@ class Generator():
         self.render=render
         self.ppo_net=ppo_net
         self.gamma=0.95 #discount factor
-        self.score=-21
+        self.score=None
         self.maxScore=-21
 
     def process_frame(self, frame): #cropped and renormalized
@@ -92,9 +92,10 @@ class Generator():
     def __getitem__(self, index):
         'Generate one batch of data'
         if self.done:
-            if int(self.score)>self.maxScore:
-                self.maxScore=int(self.score)
-            print('Score: {}'.format(int(self.score)))
+            if self.score:
+                if int(self.score)>self.maxScore:
+                    self.maxScore=int(self.score)
+                print('Score: {}'.format(int(self.score)))
             self.score=0
             self.observation=self.env.reset()
             self.observation = self.process_frame(self.observation)
@@ -223,7 +224,8 @@ def learn_proc(mem_queue, weight_dict, load, swap_freq=10):
                 weight_dict['weights']=ppo_net.get_weights()
                 weight_dict['update']+=1
                 #save the weights in a file, to load it later. The file contains the best score ever obtained
-                ppo_net.save_weights("pong_ppo_{}.h5".format(weight_dict['maxScore']))
+                if weight_dict['update']%10==0:
+                    ppo_net.save_weights("pong_ppo_{}.h5".format(weight_dict['maxScore']))
     except Exception as e: print(e)
  
 def init_worker():

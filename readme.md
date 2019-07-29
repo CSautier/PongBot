@@ -21,7 +21,7 @@ My bot plays in green (right)
 ## How to begin the training
 
 * Clone this repository: `git clone https://github.com/CSautier/PongBot`
-* Launche the game: `python PongBot.py`
+* Launch the game: `python PongBot.py`
 
 ## How to resume the training
 
@@ -30,12 +30,13 @@ Launch the game with the *load* option: `python PongBot.py --load True`
 ## What to expect of the training
 
 I've got a GTX 1060, and can run 5 processes at once. If your GPU has more memory than mine (3Gb) you can increase the number of processes: `python PongBot.py --processes 10` (for instance).
-You will get the feeling of some progress in about an hour, but it takes approximately 3 hours until you actually win some games and a day to really train the net.
+You will get the feeling of some progress in about an hour, but it takes approximately 2 hours until you actually win some games 4 to win all of them. It is difficult to evaluate the progress after that.
 
-## I get a *Cuda Memory Error*
+
+## I get a *Cuda Memory Error* or *OOM*
 
 This means your GPU is not powerful enough to run as many processes. Try launching the training with fewer processes: `python PongBot.py --processes 2`.
-If you still have this problem you should try the non-multiprocessing version, or you can force Keras to run the processes with a CPU (not recommanded and not tested).
+If you still have this problem you should try the non-multiprocessing version, or you could force Keras to run the processes with a CPU (not recommanded and not tested).
 
 ## I get a *You need a pretrained net to do this*
 
